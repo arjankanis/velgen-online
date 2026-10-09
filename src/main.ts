@@ -8,25 +8,19 @@ const material=(c:number)=>new THREE.MeshLambertMaterial({color:c});
 const grass=material(0x7aa46d),asphalt=material(0x656b6c),stone=material(0xb7b2a5),white=material(0xe9e1c8);
 function box(w:number,h:number,d:number,m:THREE.Material,x:number,y:number,z:number){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.receiveShadow=true;o.castShadow=true;scene.add(o);return o}
 let seed=12345;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}function between(a:number,b:number){return a+(b-a)*rand()}
-box(330,.2,260,grass,0,-.1,0);box(52,.08,270,material(0x377e9a),-36,.04,0);
-const roadsX=[-125,-90,10,45,80,115],roadsZ=[-105,-70,-35,0,35,70,105];
-for(const x of roadsX){box(10,.14,260,asphalt,x,.12,0);box(1,.15,260,stone,x-6,.14,0);box(1,.15,260,stone,x+6,.14,0)}
-for(const z of roadsZ){box(320,.14,10,asphalt,0,.13,z);box(320,.15,1,stone,0,.15,z-6);box(320,.15,1,stone,0,.15,z+6)}
-box(94,1.3,12,asphalt,-36,1,0);for(const z of [-7,7])box(94,1,1,stone,-36,2,z);
-function tree(x:number,z:number){prettyTree(scene,x,z)}
-const colors=[0xb97e60,0xd7a886,0xe6c8a2,0x9e6d59,0xf0d6b1],roofs=[0xa75438,0xc26a43,0x655455];
-function house(x:number,z:number){detailedHouse(scene,x,z,between(8,12),between(8,12),between(9,21))}
-for(let x=-145;x<150;x+=15)for(let z=-120;z<120;z+=16){if(x>-65&&x<-7)continue;if(roadsX.some(a=>Math.abs(x-a)<10)||roadsZ.some(a=>Math.abs(z-a)<11))continue;if(rand()<.2)tree(x,z);else house(x+between(-1,1),z+between(-1,1))}
-for(let z=-120;z<120;z+=12){tree(-66,z);tree(-5,z)}
-box(16,18,18,material(0xc2ae93),46,9,-51);box(8,37,8,material(0xb4a28a),46,28,-51);const spire=new THREE.Mesh(new THREE.ConeGeometry(6,15,4),material(0x444c50));spire.position.set(46,54,-51);scene.add(spire);
+// The procedural city has been removed. Real Kampen data is required.
+const roadsX:number[]=[],roadsZ:number[]=[];
+const loading=document.createElement('div');
+loading.id='map-status';loading.setAttribute('role','status');
+loading.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#152c3de8;color:white;padding:22px 28px;border-radius:12px;z-index:30;text-align:center;font:600 18px Arial;max-width:90vw';
+loading.textContent='Echte kaart van Kampen laden…';document.body.append(loading);
 function car(c:number,x:number,z:number){const g=new THREE.Group();const b=new THREE.Mesh(new THREE.BoxGeometry(3,1.2,5.5),material(c));b.position.y=1.2;g.add(b);const top=new THREE.Mesh(new THREE.BoxGeometry(2.5,1,2.8),material(0x95c2cc));top.position.set(0,2.1,-.3);g.add(top);for(const a of [-1.4,1.4])for(const b of [-1.8,1.8]){const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.65,.65,.3,10),material(0x202429));wheel.rotation.z=Math.PI/2;wheel.position.set(a,.7,b);g.add(wheel)}g.position.set(x,.3,z);scene.add(g);return g}
-addPromenade(scene);
-const generatedWorld=scene.children.filter(o=>!(o instanceof THREE.Light));
+const generatedWorld:THREE.Object3D[]=[];
 let osmLoaded=false;
 let osmFailed=false;
 let osmMapWays:OsmWay[]=[];
 let miniFrame=0;
-const player=car(0xf5d125,10,20);let heading=0,speed=0,driving=true;const playerVehicles:THREE.Group[]=[];playerVehicles.push(player);
+const player=car(0xf5d125,0,0);let heading=0,speed=0,driving=true;const playerVehicles:THREE.Group[]=[];playerVehicles.push(player);
 const pedestrian=new THREE.Group();const torso=new THREE.Mesh(new THREE.CylinderGeometry(.6,.7,1.7,6),material(0x4d79a3));torso.position.y=1.5;pedestrian.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.48,8,6),material(0xe7b88b));head.position.y=2.8;pedestrian.add(head);pedestrian.visible=false;scene.add(pedestrian);
 const traffic:Array<{o:THREE.Group;axis:number;dir:number;v:number}>=[];for(let i=0;i<22;i++){const axis=i%2,dir=i%4<2?1:-1,x=axis?between(-140,140):roadsX[Math.floor(rand()*roadsX.length)]+dir*2,z=axis?roadsZ[Math.floor(rand()*roadsZ.length)]-dir*2:between(-110,110);const o=car([0xce4e40,0x4681a5,0xe9e4d6,0x424d50][i%4],x,z);o.rotation.y=axis?(dir>0?Math.PI/2:-Math.PI/2):(dir>0?0:Math.PI);traffic.push({o,axis,dir,v:between(5,12)});playerVehicles.push(o)}
 const keys=new Set<string>();addEventListener('keydown',e=>{const key=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key))e.preventDefault();keys.add(key);if((key==='e'||key==='f')&&!e.repeat)toggle()});addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));document.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(b=>{const k=b.dataset.key!;b.addEventListener('pointerdown',e=>{b.setPointerCapture(e.pointerId);keys.add(k)});for(const event of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(event,()=>keys.delete(k))});document.querySelector('#act')?.addEventListener('click',toggle);
@@ -41,7 +35,7 @@ if(driving){if(up)speed+=22*dt;if(down)speed-=18*dt;if(!up&&!down)speed*=Math.po
 target.position.x=THREE.MathUtils.clamp(target.position.x,-1600,3500);target.position.z=THREE.MathUtils.clamp(target.position.z,-2300,2300);
 for(const t of traffic){if(t.v===0)continue;if(t.axis){t.o.position.x+=t.dir*t.v*dt;if(Math.abs(t.o.position.x)>145)t.o.position.x*=-1}else{t.o.position.z+=t.dir*t.v*dt;if(Math.abs(t.o.position.z)>120)t.o.position.z*=-1}}
 camera.position.lerp(new THREE.Vector3(target.position.x+43,78,target.position.z+70),Math.min(1,dt*3));camera.lookAt(target.position.x,0,target.position.z);document.querySelector('#place')!.textContent=osmFailed?'OpenStreetMap niet bereikbaar · DEMOKAART':driving?'Kampen · Auto · E/F: uitstappen':'Kampen · Te voet · E/F: instappen';document.querySelector('#clock')!.textContent='12:'+String(Math.floor(time)%60).padStart(2,'0');
-if(osmLoaded&&++miniFrame%8!==0){renderer.render(scene,camera);return}mini.clearRect(0,0,240,240);if(osmLoaded){mini.fillStyle='#a0b889';mini.fillRect(0,0,240,240);const mx=(x:number)=>120+(x-target.position.x)*.25,mz=(z:number)=>120+(z-target.position.z)*.25;for(const way of osmMapWays){if(!way.geometry||!way.tags)continue;const isRoad=!!way.tags.highway,isWater=way.tags.natural==='water'||!!way.tags.waterway;if(!isRoad&&!isWater)continue;mini.beginPath();way.geometry.forEach((p,i)=>{const v=project(p);if(i===0)mini.moveTo(mx(v.x),mz(v.y));else mini.lineTo(mx(v.x),mz(v.y))});mini.strokeStyle=isWater?'#347eab':'#686c70';mini.lineWidth=isWater?8:2;mini.stroke()}mini.fillStyle='#fce14b';mini.beginPath();mini.arc(120,120,5,0,Math.PI*2);mini.fill();renderer.render(scene,camera);return}mini.fillStyle='#8bb77d';mini.fillRect(0,0,240,240);mini.fillStyle='#397e9c';mini.fillRect(65,0,42,240);mini.fillStyle='#747a7b';for(const x of roadsX)mini.fillRect((x+150)*.8,0,7,240);for(const z of roadsZ)mini.fillRect(0,(z+125)*.96,240,7);mini.fillStyle='#ffdd21';mini.beginPath();mini.arc((target.position.x+150)*.8,(target.position.z+125)*.96,5,0,Math.PI*2);mini.fill();renderer.render(scene,camera)}frame();
+if(osmLoaded&&++miniFrame%8!==0){renderer.render(scene,camera);return}mini.clearRect(0,0,240,240);if(osmLoaded){mini.fillStyle='#a0b889';mini.fillRect(0,0,240,240);const mx=(x:number)=>120+(x-target.position.x)*.25,mz=(z:number)=>120+(z-target.position.z)*.25;for(const way of osmMapWays){if(!way.geometry||!way.tags)continue;const isRoad=!!way.tags.highway,isWater=way.tags.natural==='water'||!!way.tags.waterway;if(!isRoad&&!isWater)continue;mini.beginPath();way.geometry.forEach((p,i)=>{const v=project(p);if(i===0)mini.moveTo(mx(v.x),mz(v.y));else mini.lineTo(mx(v.x),mz(v.y))});mini.strokeStyle=isWater?'#347eab':'#686c70';mini.lineWidth=isWater?8:2;mini.stroke()}mini.fillStyle='#fce14b';mini.beginPath();mini.arc(120,120,5,0,Math.PI*2);mini.fill();renderer.render(scene,camera);return}mini.fillStyle='#283e46';mini.fillRect(0,0,240,240);renderer.render(scene,camera)}frame();
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 
 /* Real Kampen map: roads, water and building outlines from OpenStreetMap.
@@ -63,7 +57,7 @@ function osmPolygon(points:THREE.Vector2[],height:number,mat:THREE.Material,y=0)
 }
 async function loadKampen(){
  const query='[out:json][timeout:35];(way(52.549,5.895,52.563,5.933)[highway];way(52.549,5.895,52.563,5.933)[building];way(52.549,5.895,52.563,5.933)[waterway];way(52.549,5.895,52.563,5.933)[natural=water];way(52.549,5.895,52.563,5.933)[landuse=basin];);out geom;';
- const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),18000);
+ const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),45000);
  try{
   let data:{elements:OsmWay[]}|undefined;
   for(const endpoint of ['https://overpass.private.coffee/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass-api.de/api/interpreter']){
@@ -72,7 +66,7 @@ async function loadKampen(){
   if(!data?.elements?.length)throw Error('No OpenStreetMap response');
   const ways=data.elements.filter(w=>w.geometry&&w.geometry.length>1);
   if(ways.length<50)throw Error('Insufficient OSM data');
-  osmMapWays=ways;osmLoaded=true;
+  osmMapWays=ways;osmLoaded=true;loading.remove();
   for(const obj of generatedWorld)scene.remove(obj); // Keep player, pedestrians and traffic: they were created after this snapshot.
   box(3600,.2,2800,grass,0,-.1,0);
   const road=material(0x63676c),river=material(0x3988a7),buildingMats=[material(0xd5aa86),material(0xe7d1af),material(0xba8b72)];
@@ -87,7 +81,7 @@ async function loadKampen(){
   const roads=ways.filter(w=>w.tags?.highway&&w.geometry&&w.geometry.length>1);
   for(const t of traffic){const way=roads[Math.floor(rand()*roads.length)];if(!way)continue;const a=project(way.geometry![0]),b=project(way.geometry![1]);t.o.position.set(a.x,.3,a.y);t.o.rotation.y=-Math.atan2(b.x-a.x,b.y-a.y);t.v=0}
   document.querySelector('#place')!.textContent='Kampen · OpenStreetMap';
- }catch(err){osmFailed=true;console.warn('OSM unavailable',err);document.querySelector('#place')!.textContent='Kaart laden mislukt · OpenStreetMap niet bereikbaar';}
+ }catch(err){osmFailed=true;console.error('OSM unavailable',err);loading.textContent='De kaart van Kampen kon niet worden geladen. Vernieuw de pagina om opnieuw te proberen.';document.querySelector('#place')!.textContent='OpenStreetMap niet bereikbaar';}
  finally{clearTimeout(timeout)}
 }
 void loadKampen();
