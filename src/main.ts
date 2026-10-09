@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import {decorateRoad} from './visuals';
 const scene=new THREE.Scene();scene.background=new THREE.Color(0xa8d3e2);scene.fog=new THREE.Fog(0xa8d3e2,350,1600);
 const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,3000);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.55;document.body.prepend(renderer.domElement);
@@ -115,12 +114,27 @@ const metresPerDegreeLatitude=111132;
 const metresPerDegreeLongitude=111320*Math.cos(origin.lat*Math.PI/180);
 function project(p:OsmPoint){return new THREE.Vector2((p.lon-origin.lon)*metresPerDegreeLongitude,(origin.lat-p.lat)*metresPerDegreeLatitude)}
 function ribbon(points:THREE.Vector2[],width:number,mat:THREE.Material,y:number){
- for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],len=a.distanceTo(b);if(len<.01)continue;const o=new THREE.Mesh(new THREE.PlaneGeometry(width,len),new THREE.MeshBasicMaterial({color:(mat as THREE.MeshLambertMaterial).color,side:THREE.DoubleSide}));o.rotation.set(-Math.PI/2,0,-Math.atan2(b.x-a.x,b.y-a.y),'YXZ');o.position.set((a.x+b.x)/2,y,(a.y+b.y)/2);scene.add(o)}
+ const vertices:number[]=[];const indices:number[]=[];
+ for(let i=1;i<points.length;i++){
+  const a=points[i-1],b=points[i],dx=b.x-a.x,dz=b.y-a.y,len=Math.hypot(dx,dz);
+  if(len<.01)continue;
+  const nx=-dz/len*width/2,nz=dx/len*width/2,k=vertices.length/3;
+  vertices.push(a.x+nx,y,a.y+nz,a.x-nx,y,a.y-nz,b.x+nx,y,b.y+nz,b.x-nx,y,b.y-nz);
+  indices.push(k,k+1,k+2,k+1,k+3,k+2);
+ }
+ if(!indices.length)return;
+ const geo=new THREE.BufferGeometry();
+ geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+ geo.setIndex(indices);geo.computeVertexNormals();
+ const o=new THREE.Mesh(geo,mat);o.receiveShadow=true;scene.add(o);
 }
 function osmPolygon(points:THREE.Vector2[],height:number,mat:THREE.Material,y=0){
- if(points.length<3)return;const shape=new THREE.Shape();shape.moveTo(points[0].x,-points[0].y);for(const p of points.slice(1))shape.lineTo(p.x,-p.y);
- const geo=new THREE.ExtrudeGeometry(shape,{depth:height,bevelEnabled:false});geo.rotateX(-Math.PI/2);
- const mesh=new THREE.Mesh(geo,mat);mesh.position.y=y;mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
+ if(points.length<4||points[0].distanceTo(points[points.length-1])>2)return;
+ const shape=new THREE.Shape();shape.moveTo(points[0].x,-points[0].y);
+ for(const p of points.slice(1))shape.lineTo(p.x,-p.y);
+ const geo=new THREE.ExtrudeGeometry(shape,{depth:height,bevelEnabled:false,curveSegments:1});
+ geo.rotateX(-Math.PI/2);
+ const mesh=new THREE.Mesh(geo,mat);mesh.position.y=y;mesh.castShadow=height>1;mesh.receiveShadow=true;scene.add(mesh);
 }
 async function loadKampen(){
  const query='[out:json][timeout:35];(way(52.549,5.895,52.563,5.933)[highway];way(52.549,5.895,52.563,5.933)[building];way(52.549,5.895,52.563,5.933)[waterway];way(52.549,5.895,52.563,5.933)[natural=water];way(52.549,5.895,52.563,5.933)[landuse=basin];way(52.549,5.895,52.563,5.933)[waterway=riverbank];);out geom;';
@@ -136,11 +150,11 @@ async function loadKampen(){
   osmMapWays=ways;osmLoaded=true;loading.remove();
   for(const obj of generatedWorld)scene.remove(obj); // Keep player, pedestrians and traffic: they were created after this snapshot.
   box(3600,.2,2800,grass,0,-.1,0);
-  const road=material(0x63676c),river=material(0x3988a7),buildingMats=[material(0xd5aa86),material(0xe7d1af),material(0xba8b72)];
-  for(const way of ways){const pts=way.geometry!.map(project);
+  const road=new THREE.MeshBasicMaterial({color:0x63676c,side:THREE.DoubleSide}),river=new THREE.MeshBasicMaterial({color:0x3988a7,side:THREE.DoubleSide}),buildingMats=[material(0xd5aa86),material(0xe7d1af),material(0xba8b72)];
+  for(const way of [...ways].sort((a,b)=>{const rank=(w:OsmWay)=>w.tags?.natural==='water'||w.tags?.waterway==='riverbank'?0:w.tags?.highway?2:w.tags?.building?3:1;return rank(a)-rank(b)})){const pts=way.geometry!.map(project);
    if(way.tags?.natural==='water'||way.tags?.landuse==='basin'||way.tags?.waterway==='riverbank'){osmPolygon(pts,.06,river,.05);if(pts.length>=4){const xs=pts.map(p=>p.x),zs=pts.map(p=>p.y);waterRegions.push({polygon:pts,minX:Math.min(...xs),maxX:Math.max(...xs),minZ:Math.min(...zs),maxZ:Math.max(...zs)})}}
    else if(way.tags?.waterway)ribbon(pts,way.tags.waterway==='river'?18:5,river,.08);
-   else if(way.tags?.highway){const category=way.tags.highway;const width=['primary','secondary','tertiary','trunk'].includes(category)?8:['footway','path','pedestrian','cycleway'].includes(category)?2.2:5;ribbon(pts,width,road,.13);if(!way.tags.bridge&&!way.tags.tunnel&&!['footway','path','steps','cycleway','pedestrian'].includes(category))for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];if(a.distanceTo(b)>1)roadSegments.push({a,b,heading:-Math.atan2(b.x-a.x,b.y-a.y)})}if(pts.length<80)for(let i=1;i<pts.length;i++)decorateRoad(scene,pts[i-1],pts[i],width)}
+   else if(way.tags?.highway){const category=way.tags.highway;const width=['primary','secondary','tertiary','trunk'].includes(category)?8:['footway','path','pedestrian','cycleway'].includes(category)?2.2:5;ribbon(pts,width,road,way.tags.bridge==='yes'?2.2:.13);if(!way.tags.bridge&&!way.tags.tunnel&&!['footway','path','steps','cycleway','pedestrian'].includes(category))for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];if(a.distanceTo(b)>1)roadSegments.push({a,b,heading:-Math.atan2(b.x-a.x,b.y-a.y)})}void width}
    else if(way.tags?.building){const floors=Number(way.tags['building:levels']);const height=Number.isFinite(floors)&&floors>0?Math.min(30,floors*3.3):between(7,17);osmPolygon(pts,height,buildingMats[Math.floor(rand()*buildingMats.length)]);void height}
   }
   // Spawn near the Kampen city centre, not at an arbitrary origin.
