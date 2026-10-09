@@ -8,7 +8,6 @@ const material=(c:number)=>new THREE.MeshLambertMaterial({color:c});
 const grass=material(0x7aa46d),asphalt=material(0x656b6c),stone=material(0xb7b2a5),white=material(0xe9e1c8);
 function box(w:number,h:number,d:number,m:THREE.Material,x:number,y:number,z:number){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.receiveShadow=true;o.castShadow=true;scene.add(o);return o}
 let seed=12345;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}function between(a:number,b:number){return a+(b-a)*rand()}
-let seed=12345;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}function between(a:number,b:number){return a+(b-a)*rand()}
 // The procedural city has been removed. Real Kampen data is required.
 const roadsX:number[]=[],roadsZ:number[]=[];
 const loading=document.createElement('div');
@@ -21,18 +20,85 @@ let osmLoaded=false;
 let osmFailed=false;
 let osmMapWays:OsmWay[]=[];
 let miniFrame=0;
+type WaterRegion={polygon:THREE.Vector2[];minX:number;maxX:number;minZ:number;maxZ:number};
+const waterRegions:WaterRegion[]=[];
+const roadSegments:Array<{a:THREE.Vector2;b:THREE.Vector2;heading:number}>=[];
+let splashTime=0,respawnPending=false;
+const splashParticles:THREE.Mesh[]=[];
+const splashMaterial=new THREE.MeshBasicMaterial({color:0xe8faff,transparent:true,opacity:.92});
+const splashGeometry=new THREE.SphereGeometry(.55,5,4);
+const splashLabel=document.createElement('div');
+splashLabel.style.cssText='display:none;position:fixed;left:50%;top:35%;transform:translate(-50%,-50%);z-index:50;color:white;background:#102c3dcc;border-radius:14px;padding:20px;text-align:center;font:bold 24px Arial;pointer-events:none;text-shadow:0 2px 4px #123';
+document.body.append(splashLabel);
+function insidePolygon(x:number,z:number,p:THREE.Vector2[]){
+ let inside=false;
+ for(let i=0,j=p.length-1;i<p.length;j=i++){
+  const a=p[i],b=p[j];
+  if(((a.y>z)!==(b.y>z))&&(x<(b.x-a.x)*(z-a.y)/(b.y-a.y)+a.x))inside=!inside;
+ }
+ return inside;
+}
+function inWater(x:number,z:number){
+ return waterRegions.some(w=>x>=w.minX&&x<=w.maxX&&z>=w.minZ&&z<=w.maxZ&&insidePolygon(x,z,w.polygon));
+}
+function nearestSafeRoad(x:number,z:number){
+ let best:{x:number;z:number;heading:number;distance:number}|null=null;
+ for(const seg of roadSegments){
+  const dx=seg.b.x-seg.a.x,dz=seg.b.y-seg.a.y;
+  const t=THREE.MathUtils.clamp(((x-seg.a.x)*dx+(z-seg.a.y)*dz)/(dx*dx+dz*dz||1),0,1);
+  const px=seg.a.x+t*dx,pz=seg.a.y+t*dz;
+  if(inWater(px,pz))continue;
+  const d=(px-x)**2+(pz-z)**2;
+  if(!best||d<best.distance)best={x:px,z:pz,heading:seg.heading,distance:d};
+ }
+ return best;
+}
+function splash(){
+ if(respawnPending||!osmLoaded||!driving)return;
+ respawnPending=true;splashTime=0;speed=0;
+ splashLabel.style.display='block';splashLabel.textContent='PLO NS!'.replace(' ','');
+ const px=player.position.x,pz=player.position.z;
+ for(let i=0;i<45;i++){
+  const p=new THREE.Mesh(splashGeometry,splashMaterial);
+  p.position.set(px+(rand()-.5)*8,.4+rand()*2,pz+(rand()-.5)*8);
+  p.userData.velocity=new THREE.Vector3((rand()-.5)*18,7+rand()*13,(rand()-.5)*18);
+  scene.add(p);splashParticles.push(p);
+ }
+}
+function updateSplash(dt:number){
+ if(!respawnPending)return;
+ splashTime+=dt;
+ for(const p of splashParticles){
+  const v=p.userData.velocity as THREE.Vector3;
+  p.position.addScaledVector(v,dt);v.y-=25*dt;
+  if(p.position.y<.1)p.visible=false;
+ }
+ player.position.y=Math.max(-3,.3-splashTime*2.8);
+ if(splashTime>1.1)splashLabel.textContent='Je bent in het water gereden!\\nRespawnen op de dichtstbijzijnde weg…';
+ if(splashTime>2.4){
+  const road=nearestSafeRoad(player.position.x,player.position.z);
+  if(road){player.position.set(road.x,.3,road.z);heading=road.heading;player.rotation.y=heading}
+  else player.position.y=.3;
+  for(const p of splashParticles)scene.remove(p);
+  splashParticles.length=0;respawnPending=false;speed=0;splashLabel.style.display='none';
+ }
+}
+
 const player=car(0xf5d125,0,0);let heading=0,speed=0,driving=true;const playerVehicles:THREE.Group[]=[];playerVehicles.push(player);
 const pedestrian=new THREE.Group();const torso=new THREE.Mesh(new THREE.CylinderGeometry(.6,.7,1.7,6),material(0x4d79a3));torso.position.y=1.5;pedestrian.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.48,8,6),material(0xe7b88b));head.position.y=2.8;pedestrian.add(head);pedestrian.visible=false;scene.add(pedestrian);
-const traffic:Array<{o:THREE.Group;axis:number;dir:number;v:number}>=[];for(let i=0;i<22;i++){const axis=i%2,dir=i%4<2?1:-1,x=axis?between(-140,140):roadsX[Math.floor(rand()*roadsX.length)]+dir*2,z=axis?roadsZ[Math.floor(rand()*roadsZ.length)]-dir*2:between(-110,110);const o=car([0xce4e40,0x4681a5,0xe9e4d6,0x424d50][i%4],x,z);o.rotation.y=axis?(dir>0?Math.PI/2:-Math.PI/2):(dir>0?0:Math.PI);traffic.push({o,axis,dir,v:between(5,12)});playerVehicles.push(o)}
+const traffic:Array<{o:THREE.Group;axis:number;dir:number;v:number}>=[];for(let i=0;i<22;i++){const axis=i%2,dir=i%4<2?1:-1,x=0,z=0;const o=car([0xce4e40,0x4681a5,0xe9e4d6,0x424d50][i%4],x,z);o.rotation.y=axis?(dir>0?Math.PI/2:-Math.PI/2):(dir>0?0:Math.PI);traffic.push({o,axis,dir,v:between(5,12)});playerVehicles.push(o)}
 const keys=new Set<string>();addEventListener('keydown',e=>{const key=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key))e.preventDefault();keys.add(key);if((key==='e'||key==='f')&&!e.repeat)toggle()});addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));document.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(b=>{const k=b.dataset.key!;b.addEventListener('pointerdown',e=>{b.setPointerCapture(e.pointerId);keys.add(k)});for(const event of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(event,()=>keys.delete(k))});document.querySelector('#act')?.addEventListener('click',toggle);
 function toggle(){
+if(respawnPending)return;
 if(driving){driving=false;pedestrian.visible=true;pedestrian.position.copy(player.position).add(new THREE.Vector3(4,0,0));pedestrian.position.y=.3;speed=0;document.querySelector('#place')!.textContent='Te voet · E/F: instappen'}
 else{let best:THREE.Group|null=null,dist=8;for(const vehicle of playerVehicles){const d=pedestrian.position.distanceTo(vehicle.position);if(d<dist){dist=d;best=vehicle}}
 if(best){if(best!==player){const old=player.position.clone(),angle=player.rotation.y;player.position.copy(best.position);player.rotation.y=best.rotation.y;best.position.copy(old);best.rotation.y=angle;const entry=traffic.find(t=>t.o===best);if(entry){entry.o=player;entry.v=0}}driving=true;pedestrian.visible=false;speed=0;heading=player.rotation.y}}
 }
 const mini=document.querySelector<HTMLCanvasElement>('#mini')!.getContext('2d')!;const clock=new THREE.Clock();let time=0;
 function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.05);time+=dt;const up=keys.has('w')||keys.has('arrowup'),down=keys.has('s')||keys.has('arrowdown'),left=keys.has('a')||keys.has('arrowleft'),right=keys.has('d')||keys.has('arrowright');const target=driving?player:pedestrian;
-if(driving){if(up)speed+=22*dt;if(down)speed-=18*dt;if(!up&&!down)speed*=Math.pow(.94,dt*60);if(keys.has(' '))speed*=Math.pow(.8,dt*60);speed=THREE.MathUtils.clamp(speed,-12,28);if(Math.abs(speed)>.2)heading+=(Number(left)-Number(right))*dt*1.8*Math.sign(speed);player.rotation.y=heading;player.position.x-=Math.sin(heading)*speed*dt;player.position.z-=Math.cos(heading)*speed*dt}else{const dx=Number(right)-Number(left),dz=Number(down)-Number(up),len=Math.hypot(dx,dz)||1;pedestrian.position.x+=dx/len*8*dt;pedestrian.position.z+=dz/len*8*dt}
+if(driving&&!respawnPending){if(up)speed+=22*dt;if(down)speed-=18*dt;if(!up&&!down)speed*=Math.pow(.94,dt*60);if(keys.has(' '))speed*=Math.pow(.8,dt*60);speed=THREE.MathUtils.clamp(speed,-12,28);if(Math.abs(speed)>.2)heading+=(Number(left)-Number(right))*dt*1.8*Math.sign(speed);player.rotation.y=heading;player.position.x-=Math.sin(heading)*speed*dt;player.position.z-=Math.cos(heading)*speed*dt}else{const dx=Number(right)-Number(left),dz=Number(down)-Number(up),len=Math.hypot(dx,dz)||1;pedestrian.position.x+=dx/len*8*dt;pedestrian.position.z+=dz/len*8*dt}
+if(driving&&!respawnPending&&inWater(player.position.x,player.position.z))splash();
+updateSplash(dt);
 target.position.x=THREE.MathUtils.clamp(target.position.x,-1600,3500);target.position.z=THREE.MathUtils.clamp(target.position.z,-2300,2300);
 for(const t of traffic){if(t.v===0)continue;if(t.axis){t.o.position.x+=t.dir*t.v*dt;if(Math.abs(t.o.position.x)>145)t.o.position.x*=-1}else{t.o.position.z+=t.dir*t.v*dt;if(Math.abs(t.o.position.z)>120)t.o.position.z*=-1}}
 camera.position.lerp(new THREE.Vector3(target.position.x+95,180,target.position.z+155),Math.min(1,dt*3));camera.lookAt(target.position.x,0,target.position.z);document.querySelector('#place')!.textContent=osmFailed?'OpenStreetMap niet bereikbaar · DEMOKAART':driving?'Kampen · Auto · E/F: uitstappen':'Kampen · Te voet · E/F: instappen';document.querySelector('#clock')!.textContent='12:'+String(Math.floor(time)%60).padStart(2,'0');
@@ -72,9 +138,9 @@ async function loadKampen(){
   box(3600,.2,2800,grass,0,-.1,0);
   const road=material(0x63676c),river=material(0x3988a7),buildingMats=[material(0xd5aa86),material(0xe7d1af),material(0xba8b72)];
   for(const way of ways){const pts=way.geometry!.map(project);
-   if(way.tags?.natural==='water'||way.tags?.landuse==='basin')osmPolygon(pts,.06,river,.05);
+   if(way.tags?.natural==='water'||way.tags?.landuse==='basin'){osmPolygon(pts,.06,river,.05);if(pts.length>=4){const xs=pts.map(p=>p.x),zs=pts.map(p=>p.y);waterRegions.push({polygon:pts,minX:Math.min(...xs),maxX:Math.max(...xs),minZ:Math.min(...zs),maxZ:Math.max(...zs)})}}
    else if(way.tags?.waterway)ribbon(pts,way.tags.waterway==='river'?18:5,river,.08);
-   else if(way.tags?.highway){const category=way.tags.highway;const width=['primary','secondary','tertiary','trunk'].includes(category)?8:['footway','path','pedestrian','cycleway'].includes(category)?2.2:5;ribbon(pts,width,road,.13);if(pts.length<80)for(let i=1;i<pts.length;i++)decorateRoad(scene,pts[i-1],pts[i],width)}
+   else if(way.tags?.highway){const category=way.tags.highway;const width=['primary','secondary','tertiary','trunk'].includes(category)?8:['footway','path','pedestrian','cycleway'].includes(category)?2.2:5;ribbon(pts,width,road,.13);if(!way.tags.bridge&&!way.tags.tunnel&&!['footway','path','steps','cycleway','pedestrian'].includes(category))for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];if(a.distanceTo(b)>1)roadSegments.push({a,b,heading:-Math.atan2(b.x-a.x,b.y-a.y)})}if(pts.length<80)for(let i=1;i<pts.length;i++)decorateRoad(scene,pts[i-1],pts[i],width)}
    else if(way.tags?.building){const floors=Number(way.tags['building:levels']);const height=Number.isFinite(floors)&&floors>0?Math.min(30,floors*3.3):between(7,17);osmPolygon(pts,height,buildingMats[Math.floor(rand()*buildingMats.length)]);void height}
   }
   // Spawn near the Kampen city centre, not at an arbitrary origin.
