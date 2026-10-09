@@ -49,7 +49,7 @@ const metresPerDegreeLatitude=111132;
 const metresPerDegreeLongitude=111320*Math.cos(origin.lat*Math.PI/180);
 function project(p:OsmPoint){return new THREE.Vector2((p.lon-origin.lon)*metresPerDegreeLongitude,(origin.lat-p.lat)*metresPerDegreeLatitude)}
 function ribbon(points:THREE.Vector2[],width:number,mat:THREE.Material,y:number){
- for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],len=a.distanceTo(b);if(len<.01)continue;const o=new THREE.Mesh(new THREE.PlaneGeometry(width,len),mat);o.rotation.x=-Math.PI/2;o.rotation.z=-Math.atan2(b.x-a.x,b.y-a.y);o.position.set((a.x+b.x)/2,y,(a.y+b.y)/2);scene.add(o)}
+ for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],len=a.distanceTo(b);if(len<.01)continue;const o=new THREE.Mesh(new THREE.PlaneGeometry(width,len),new THREE.MeshBasicMaterial({color:(mat as THREE.MeshLambertMaterial).color,side:THREE.DoubleSide}));o.rotation.set(-Math.PI/2,0,-Math.atan2(b.x-a.x,b.y-a.y),'YXZ');o.position.set((a.x+b.x)/2,y,(a.y+b.y)/2);scene.add(o)}
 }
 function osmPolygon(points:THREE.Vector2[],height:number,mat:THREE.Material,y=0){
  if(points.length<3)return;const shape=new THREE.Shape();shape.moveTo(points[0].x,-points[0].y);for(const p of points.slice(1))shape.lineTo(p.x,-p.y);
