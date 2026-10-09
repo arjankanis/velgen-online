@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import {decorateBuilding,decorateRoad} from './visuals';
-const scene=new THREE.Scene();scene.background=new THREE.Color(0xa8d3e2);scene.fog=new THREE.Fog(0xa8d3e2,170,360);
-const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,600);
+import {decorateRoad} from './visuals';
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xa8d3e2);scene.fog=new THREE.Fog(0xa8d3e2,350,1600);
+const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,3000);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.55;document.body.prepend(renderer.domElement);
 scene.add(new THREE.HemisphereLight(0xffffff,0x6c8b75,2.4));const sun=new THREE.DirectionalLight(0xffedc9,2.5);sun.position.set(-55,100,65);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-170;sun.shadow.camera.right=170;sun.shadow.camera.top=170;sun.shadow.camera.bottom=-170;sun.shadow.bias=-.0003;scene.add(sun);
 const material=(c:number)=>new THREE.MeshLambertMaterial({color:c});
@@ -35,7 +35,7 @@ function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta()
 if(driving){if(up)speed+=22*dt;if(down)speed-=18*dt;if(!up&&!down)speed*=Math.pow(.94,dt*60);if(keys.has(' '))speed*=Math.pow(.8,dt*60);speed=THREE.MathUtils.clamp(speed,-12,28);if(Math.abs(speed)>.2)heading+=(Number(left)-Number(right))*dt*1.8*Math.sign(speed);player.rotation.y=heading;player.position.x-=Math.sin(heading)*speed*dt;player.position.z-=Math.cos(heading)*speed*dt}else{const dx=Number(right)-Number(left),dz=Number(down)-Number(up),len=Math.hypot(dx,dz)||1;pedestrian.position.x+=dx/len*8*dt;pedestrian.position.z+=dz/len*8*dt}
 target.position.x=THREE.MathUtils.clamp(target.position.x,-1600,3500);target.position.z=THREE.MathUtils.clamp(target.position.z,-2300,2300);
 for(const t of traffic){if(t.v===0)continue;if(t.axis){t.o.position.x+=t.dir*t.v*dt;if(Math.abs(t.o.position.x)>145)t.o.position.x*=-1}else{t.o.position.z+=t.dir*t.v*dt;if(Math.abs(t.o.position.z)>120)t.o.position.z*=-1}}
-camera.position.lerp(new THREE.Vector3(target.position.x+43,78,target.position.z+70),Math.min(1,dt*3));camera.lookAt(target.position.x,0,target.position.z);document.querySelector('#place')!.textContent=osmFailed?'OpenStreetMap niet bereikbaar · DEMOKAART':driving?'Kampen · Auto · E/F: uitstappen':'Kampen · Te voet · E/F: instappen';document.querySelector('#clock')!.textContent='12:'+String(Math.floor(time)%60).padStart(2,'0');
+camera.position.lerp(new THREE.Vector3(target.position.x+95,180,target.position.z+155),Math.min(1,dt*3));camera.lookAt(target.position.x,0,target.position.z);document.querySelector('#place')!.textContent=osmFailed?'OpenStreetMap niet bereikbaar · DEMOKAART':driving?'Kampen · Auto · E/F: uitstappen':'Kampen · Te voet · E/F: instappen';document.querySelector('#clock')!.textContent='12:'+String(Math.floor(time)%60).padStart(2,'0');
 if(osmLoaded&&++miniFrame%8!==0){renderer.render(scene,camera);return}mini.clearRect(0,0,240,240);if(osmLoaded){mini.fillStyle='#a0b889';mini.fillRect(0,0,240,240);const mx=(x:number)=>120+(x-target.position.x)*.25,mz=(z:number)=>120+(z-target.position.z)*.25;for(const way of osmMapWays){if(!way.geometry||!way.tags)continue;const isRoad=!!way.tags.highway,isWater=way.tags.natural==='water'||!!way.tags.waterway;if(!isRoad&&!isWater)continue;mini.beginPath();way.geometry.forEach((p,i)=>{const v=project(p);if(i===0)mini.moveTo(mx(v.x),mz(v.y));else mini.lineTo(mx(v.x),mz(v.y))});mini.strokeStyle=isWater?'#347eab':'#686c70';mini.lineWidth=isWater?8:2;mini.stroke()}mini.fillStyle='#fce14b';mini.beginPath();mini.arc(120,120,5,0,Math.PI*2);mini.fill();renderer.render(scene,camera);return}mini.fillStyle='#283e46';mini.fillRect(0,0,240,240);renderer.render(scene,camera)}frame();
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 
@@ -75,7 +75,7 @@ async function loadKampen(){
    if(way.tags?.natural==='water'||way.tags?.landuse==='basin')osmPolygon(pts,.06,river,.05);
    else if(way.tags?.waterway)ribbon(pts,way.tags.waterway==='river'?18:5,river,.08);
    else if(way.tags?.highway){const category=way.tags.highway;const width=['primary','secondary','tertiary','trunk'].includes(category)?8:['footway','path','pedestrian','cycleway'].includes(category)?2.2:5;ribbon(pts,width,road,.13);if(pts.length<80)for(let i=1;i<pts.length;i++)decorateRoad(scene,pts[i-1],pts[i],width)}
-   else if(way.tags?.building){const floors=Number(way.tags['building:levels']);const height=Number.isFinite(floors)&&floors>0?Math.min(30,floors*3.3):between(7,17);osmPolygon(pts,height,buildingMats[Math.floor(rand()*buildingMats.length)]);if(pts.length<60)decorateBuilding(scene,pts,height)}
+   else if(way.tags?.building){const floors=Number(way.tags['building:levels']);const height=Number.isFinite(floors)&&floors>0?Math.min(30,floors*3.3):between(7,17);osmPolygon(pts,height,buildingMats[Math.floor(rand()*buildingMats.length)]);void height}
   }
   // Spawn near the Kampen city centre, not at an arbitrary origin.
   const start=project({lat:52.556,lon:5.915});player.position.set(start.x,.3,start.y);
