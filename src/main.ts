@@ -28,7 +28,7 @@ const splashParticles:THREE.Mesh[]=[];
 const splashMaterial=new THREE.MeshBasicMaterial({color:0xe8faff,transparent:true,opacity:.92});
 const splashGeometry=new THREE.SphereGeometry(.55,5,4);
 const splashLabel=document.createElement('div');
-splashLabel.style.cssText='display:none;position:fixed;left:50%;top:35%;transform:translate(-50%,-50%);z-index:50;color:white;background:#102c3dcc;border-radius:14px;padding:20px;text-align:center;font:bold 24px Arial;pointer-events:none;text-shadow:0 2px 4px #123';
+splashLabel.style.cssText='display:none;position:fixed;left:50%;top:35%;transform:translate(-50%,-50%);z-index:50;color:white;background:#102c3dcc;border-radius:14px;padding:20px;text-align:center;font:bold 24px Arial;pointer-events:none;text-shadow:0 2px 4px #123;white-space:pre-line';
 document.body.append(splashLabel);
 function insidePolygon(x:number,z:number,p:THREE.Vector2[]){
  let inside=false;
@@ -56,7 +56,7 @@ function nearestSafeRoad(x:number,z:number){
 function splash(){
  if(respawnPending||!osmLoaded||!driving)return;
  respawnPending=true;splashTime=0;speed=0;
- splashLabel.style.display='block';splashLabel.textContent='PLO NS!'.replace(' ','');
+ splashLabel.style.display='block';splashLabel.textContent='PLONS! 💦';
  const px=player.position.x,pz=player.position.z;
  for(let i=0;i<45;i++){
   const p=new THREE.Mesh(splashGeometry,splashMaterial);
@@ -123,7 +123,7 @@ function osmPolygon(points:THREE.Vector2[],height:number,mat:THREE.Material,y=0)
  const mesh=new THREE.Mesh(geo,mat);mesh.position.y=y;mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
 }
 async function loadKampen(){
- const query='[out:json][timeout:35];(way(52.549,5.895,52.563,5.933)[highway];way(52.549,5.895,52.563,5.933)[building];way(52.549,5.895,52.563,5.933)[waterway];way(52.549,5.895,52.563,5.933)[natural=water];way(52.549,5.895,52.563,5.933)[landuse=basin];);out geom;';
+ const query='[out:json][timeout:35];(way(52.549,5.895,52.563,5.933)[highway];way(52.549,5.895,52.563,5.933)[building];way(52.549,5.895,52.563,5.933)[waterway];way(52.549,5.895,52.563,5.933)[natural=water];way(52.549,5.895,52.563,5.933)[landuse=basin];way(52.549,5.895,52.563,5.933)[waterway=riverbank];);out geom;';
  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),45000);
  try{
   let data:{elements:OsmWay[]}|undefined;
@@ -138,7 +138,7 @@ async function loadKampen(){
   box(3600,.2,2800,grass,0,-.1,0);
   const road=material(0x63676c),river=material(0x3988a7),buildingMats=[material(0xd5aa86),material(0xe7d1af),material(0xba8b72)];
   for(const way of ways){const pts=way.geometry!.map(project);
-   if(way.tags?.natural==='water'||way.tags?.landuse==='basin'){osmPolygon(pts,.06,river,.05);if(pts.length>=4){const xs=pts.map(p=>p.x),zs=pts.map(p=>p.y);waterRegions.push({polygon:pts,minX:Math.min(...xs),maxX:Math.max(...xs),minZ:Math.min(...zs),maxZ:Math.max(...zs)})}}
+   if(way.tags?.natural==='water'||way.tags?.landuse==='basin'||way.tags?.waterway==='riverbank'){osmPolygon(pts,.06,river,.05);if(pts.length>=4){const xs=pts.map(p=>p.x),zs=pts.map(p=>p.y);waterRegions.push({polygon:pts,minX:Math.min(...xs),maxX:Math.max(...xs),minZ:Math.min(...zs),maxZ:Math.max(...zs)})}}
    else if(way.tags?.waterway)ribbon(pts,way.tags.waterway==='river'?18:5,river,.08);
    else if(way.tags?.highway){const category=way.tags.highway;const width=['primary','secondary','tertiary','trunk'].includes(category)?8:['footway','path','pedestrian','cycleway'].includes(category)?2.2:5;ribbon(pts,width,road,.13);if(!way.tags.bridge&&!way.tags.tunnel&&!['footway','path','steps','cycleway','pedestrian'].includes(category))for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];if(a.distanceTo(b)>1)roadSegments.push({a,b,heading:-Math.atan2(b.x-a.x,b.y-a.y)})}if(pts.length<80)for(let i=1;i<pts.length;i++)decorateRoad(scene,pts[i-1],pts[i],width)}
    else if(way.tags?.building){const floors=Number(way.tags['building:levels']);const height=Number.isFinite(floors)&&floors>0?Math.min(30,floors*3.3):between(7,17);osmPolygon(pts,height,buildingMats[Math.floor(rand()*buildingMats.length)]);void height}
@@ -147,6 +147,7 @@ async function loadKampen(){
   const start=project({lat:52.556,lon:5.915});player.position.set(start.x,.3,start.y);
   const roads=ways.filter(w=>w.tags?.highway&&w.geometry&&w.geometry.length>1);
   for(const t of traffic){const way=roads[Math.floor(rand()*roads.length)];if(!way)continue;const a=project(way.geometry![0]),b=project(way.geometry![1]);t.o.position.set(a.x,.3,a.y);t.o.rotation.y=-Math.atan2(b.x-a.x,b.y-a.y);t.v=0}
+  const safeStart=nearestSafeRoad(player.position.x,player.position.z);if(safeStart){player.position.set(safeStart.x,.3,safeStart.z);heading=safeStart.heading;player.rotation.y=heading}
   document.querySelector('#place')!.textContent='Kampen · OpenStreetMap';
  }catch(err){osmFailed=true;console.error('OSM unavailable',err);loading.textContent='De kaart van Kampen kon niet worden geladen. Vernieuw de pagina om opnieuw te proberen.';document.querySelector('#place')!.textContent='OpenStreetMap niet bereikbaar';}
  finally{clearTimeout(timeout)}
