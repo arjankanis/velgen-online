@@ -1,24 +1,26 @@
 import * as THREE from 'three';
+import {prettyTree,detailedHouse,decorateBuilding,decorateRoad,addPromenade} from './visuals';
 const scene=new THREE.Scene();scene.background=new THREE.Color(0xa8d3e2);scene.fog=new THREE.Fog(0xa8d3e2,170,360);
 const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,600);
-const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=true;document.body.prepend(renderer.domElement);
-scene.add(new THREE.HemisphereLight(0xffffff,0x6c8b75,2.4));const sun=new THREE.DirectionalLight(0xffedc9,2.5);sun.position.set(-55,100,65);scene.add(sun);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.55;document.body.prepend(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x6c8b75,2.4));const sun=new THREE.DirectionalLight(0xffedc9,2.5);sun.position.set(-55,100,65);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-170;sun.shadow.camera.right=170;sun.shadow.camera.top=170;sun.shadow.camera.bottom=-170;sun.shadow.bias=-.0003;scene.add(sun);
 const material=(c:number)=>new THREE.MeshLambertMaterial({color:c});
 const grass=material(0x7aa46d),asphalt=material(0x656b6c),stone=material(0xb7b2a5),white=material(0xe9e1c8);
-function box(w:number,h:number,d:number,m:THREE.Material,x:number,y:number,z:number){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.receiveShadow=true;scene.add(o);return o}
+function box(w:number,h:number,d:number,m:THREE.Material,x:number,y:number,z:number){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.receiveShadow=true;o.castShadow=true;scene.add(o);return o}
 let seed=12345;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}function between(a:number,b:number){return a+(b-a)*rand()}
 box(330,.2,260,grass,0,-.1,0);box(52,.08,270,material(0x377e9a),-36,.04,0);
 const roadsX=[-125,-90,10,45,80,115],roadsZ=[-105,-70,-35,0,35,70,105];
 for(const x of roadsX){box(10,.14,260,asphalt,x,.12,0);box(1,.15,260,stone,x-6,.14,0);box(1,.15,260,stone,x+6,.14,0)}
 for(const z of roadsZ){box(320,.14,10,asphalt,0,.13,z);box(320,.15,1,stone,0,.15,z-6);box(320,.15,1,stone,0,.15,z+6)}
 box(94,1.3,12,asphalt,-36,1,0);for(const z of [-7,7])box(94,1,1,stone,-36,2,z);
-function tree(x:number,z:number){box(.7,3,.7,material(0x76563a),x,1.5,z);const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(between(2,3.2),0),material(0x4b934d));crown.position.set(x,4,z);scene.add(crown)}
+function tree(x:number,z:number){prettyTree(scene,x,z)}
 const colors=[0xb97e60,0xd7a886,0xe6c8a2,0x9e6d59,0xf0d6b1],roofs=[0xa75438,0xc26a43,0x655455];
-function house(x:number,z:number){const h=between(9,21),w=between(8,12),d=between(8,12);box(w,h,d,material(colors[Math.floor(rand()*colors.length)]),x,h/2,z);const roof=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*.75,4,4),material(roofs[Math.floor(rand()*roofs.length)]));roof.rotation.y=Math.PI/4;roof.position.set(x,h+2,z);scene.add(roof);for(let f=0;f<Math.floor(h/3.3);f++)for(let a=-w/2+2;a<w/2-1;a+=3.2)box(1,1.5,.12,material(0x4c6571),x+a,2.2+f*3.1,z+d/2+.1)}
+function house(x:number,z:number){detailedHouse(scene,x,z,between(8,12),between(8,12),between(9,21))}
 for(let x=-145;x<150;x+=15)for(let z=-120;z<120;z+=16){if(x>-65&&x<-7)continue;if(roadsX.some(a=>Math.abs(x-a)<10)||roadsZ.some(a=>Math.abs(z-a)<11))continue;if(rand()<.2)tree(x,z);else house(x+between(-1,1),z+between(-1,1))}
 for(let z=-120;z<120;z+=12){tree(-66,z);tree(-5,z)}
 box(16,18,18,material(0xc2ae93),46,9,-51);box(8,37,8,material(0xb4a28a),46,28,-51);const spire=new THREE.Mesh(new THREE.ConeGeometry(6,15,4),material(0x444c50));spire.position.set(46,54,-51);scene.add(spire);
 function car(c:number,x:number,z:number){const g=new THREE.Group();const b=new THREE.Mesh(new THREE.BoxGeometry(3,1.2,5.5),material(c));b.position.y=1.2;g.add(b);const top=new THREE.Mesh(new THREE.BoxGeometry(2.5,1,2.8),material(0x95c2cc));top.position.set(0,2.1,-.3);g.add(top);for(const a of [-1.4,1.4])for(const b of [-1.8,1.8]){const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.65,.65,.3,10),material(0x202429));wheel.rotation.z=Math.PI/2;wheel.position.set(a,.7,b);g.add(wheel)}g.position.set(x,.3,z);scene.add(g);return g}
+addPromenade(scene);
 const generatedWorld=scene.children.filter(o=>!(o instanceof THREE.Light));
 const player=car(0xf5d125,10,20);let heading=0,speed=0,driving=true;const playerVehicles:THREE.Group[]=[];playerVehicles.push(player);
 const pedestrian=new THREE.Group();const torso=new THREE.Mesh(new THREE.CylinderGeometry(.6,.7,1.7,6),material(0x4d79a3));torso.position.y=1.5;pedestrian.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.48,8,6),material(0xe7b88b));head.position.y=2.8;pedestrian.add(head);pedestrian.visible=false;scene.add(pedestrian);
@@ -51,7 +53,7 @@ function ribbon(points:THREE.Vector2[],width:number,mat:THREE.Material,y:number)
 function osmPolygon(points:THREE.Vector2[],height:number,mat:THREE.Material,y=0){
  if(points.length<3)return;const shape=new THREE.Shape();shape.moveTo(points[0].x,-points[0].y);for(const p of points.slice(1))shape.lineTo(p.x,-p.y);
  const geo=new THREE.ExtrudeGeometry(shape,{depth:height,bevelEnabled:false});geo.rotateX(-Math.PI/2);
- const mesh=new THREE.Mesh(geo,mat);mesh.position.y=y;scene.add(mesh);
+ const mesh=new THREE.Mesh(geo,mat);mesh.position.y=y;mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
 }
 async function loadKampen(){
  const query='[out:json][timeout:40];(way(52.546,5.889,52.565,5.932)[highway];way(52.546,5.889,52.565,5.932)[building];way(52.546,5.889,52.565,5.932)[waterway];way(52.546,5.889,52.565,5.932)[natural=water];);out geom;';
@@ -68,8 +70,8 @@ async function loadKampen(){
   for(const way of ways){const pts=way.geometry!.map(project);
    if(way.tags?.natural==='water')osmPolygon(pts,.06,river,.05);
    else if(way.tags?.waterway)ribbon(pts,way.tags.waterway==='river'?18:5,river,.08);
-   else if(way.tags?.highway){const category=way.tags.highway;const width=['primary','secondary','tertiary','trunk'].includes(category)?8:['footway','path','pedestrian','cycleway'].includes(category)?2.2:5;ribbon(pts,width,road,.13)}
-   else if(way.tags?.building){const floors=Number(way.tags['building:levels']);const height=Number.isFinite(floors)&&floors>0?Math.min(30,floors*3.3):between(7,17);osmPolygon(pts,height,buildingMats[Math.floor(rand()*buildingMats.length)])}
+   else if(way.tags?.highway){const category=way.tags.highway;const width=['primary','secondary','tertiary','trunk'].includes(category)?8:['footway','path','pedestrian','cycleway'].includes(category)?2.2:5;ribbon(pts,width,road,.13);if(pts.length<80)for(let i=1;i<pts.length;i++)decorateRoad(scene,pts[i-1],pts[i],width)}
+   else if(way.tags?.building){const floors=Number(way.tags['building:levels']);const height=Number.isFinite(floors)&&floors>0?Math.min(30,floors*3.3):between(7,17);osmPolygon(pts,height,buildingMats[Math.floor(rand()*buildingMats.length)]);if(pts.length<60)decorateBuilding(scene,pts,height)}
   }
   player.position.set(20,.3,20);
   const roads=ways.filter(w=>w.tags?.highway&&w.geometry&&w.geometry.length>1);
