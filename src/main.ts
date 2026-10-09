@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {prettyTree,detailedHouse,decorateBuilding,decorateRoad,addPromenade} from './visuals';
+import {decorateBuilding,decorateRoad} from './visuals';
 const scene=new THREE.Scene();scene.background=new THREE.Color(0xa8d3e2);scene.fog=new THREE.Fog(0xa8d3e2,170,360);
 const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,600);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.55;document.body.prepend(renderer.domElement);
@@ -7,6 +7,7 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x6c8b75,2.4));const sun=new THREE.
 const material=(c:number)=>new THREE.MeshLambertMaterial({color:c});
 const grass=material(0x7aa46d),asphalt=material(0x656b6c),stone=material(0xb7b2a5),white=material(0xe9e1c8);
 function box(w:number,h:number,d:number,m:THREE.Material,x:number,y:number,z:number){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.receiveShadow=true;o.castShadow=true;scene.add(o);return o}
+let seed=12345;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}function between(a:number,b:number){return a+(b-a)*rand()}
 let seed=12345;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}function between(a:number,b:number){return a+(b-a)*rand()}
 // The procedural city has been removed. Real Kampen data is required.
 const roadsX:number[]=[],roadsZ:number[]=[];
